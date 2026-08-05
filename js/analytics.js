@@ -26,11 +26,6 @@
   var API = 'https://superacao-analytics.beatrizgribas.workers.dev';
   /* ========================================================= */
 
-  if (API.indexOf('https://superacao-analytics.beatrizgribas.workers.dev') !== -1) {
-    console.warn('[analytics] endereco do Worker ainda nao configurado');
-    return;
-  }
-
   /* ---------- identidade anonima de sessao ---------- */
   var sid;
   try {
