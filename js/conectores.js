@@ -170,7 +170,7 @@ async function buscarCursosTrampolim(cidade){
 /* --- injeta os cursos no DADOS_CIDADE, criando categorias por area_interest --- */
 function mesclarTrampolim(cursos){
   cursos.forEach(c=>{
-    if(!cursoAtingeCargaMinima(c.carga)) return;   // filtra cursos curtos (< CARGA_MINIMA_H)
+    if(!cursoAtingeCargaMinima(c.carga)) return;   // filtra cursos curtos (< 10h)
     const id = areaDoCurso(c.nome, ...(c._rotulos || []));
     (DADOS_CIDADE[id] = DADOS_CIDADE[id] || {cursos:[],oportunidades:[]}).cursos.push(c);
   });
@@ -307,7 +307,7 @@ async function carregarTrampolimVagasEAtualizar(cidade, token){
 /* =====================================================================
    SEBRAE SP  ·  Adobe Commerce (Catalog Service / Live Search) GraphQL
    - Cursos online gratuitos da loja do Sebrae SP (sp.loja.sebrae.com.br).
-   - So entram cursos GRATUITOS (preco 0) e com carga horaria >= CARGA_MINIMA_H
+   - So entram cursos GRATUITOS (preco 0) e com carga horaria >= 10h
      (a duracao vem estruturada em horas no atributo "duracao").
    - Se o navegador bloquear por CORS, veja SEBRAE_CORS_PROXY abaixo.
    ===================================================================== */
@@ -356,10 +356,10 @@ function normalizarCursoSebrae(item){
   const fmt     = sebraeAttr(pv,"event_format");       // ex.: "Curso autoinstrucional"
   return {
     nome: pv.name || p.name || "Curso",
-    inst: "Sebrae SP · online, gratuito",
+    inst: "Sebrae SP",
     modalidade: fmt || "Online",
     carga: fmtCargaSebrae(duracao),
-    _cargaH: duracao,                                  // usado pelo filtro de carga minima
+    _cargaH: duracao,                                  // usado pelo filtro de 10h
     desc: stripHTML(p.description && p.description.html) || sebraeAttr(pv,"objective"),
     link: urlAbsolutaSebrae(pv.url || pv.urlKey),
     _gratis: sebraeGratuito(item, pv),
@@ -491,7 +491,7 @@ async function buscarCursosSebrae(){
   const comCarga     = gratuitos.filter(c => cursoAtingeCargaMinima(c._cargaH));
   const cursos       = comCarga.filter(c => sebraeAderenteAoPublico(c.nome));
   const removidosPeloFiltro = comCarga.length - cursos.length;
-  console.log("[Sebrae] recebidos:", brutos.length, "| gratuitos:", gratuitos.length, "| com "+CARGA_MINIMA_H+"h+:", comCarga.length, "| aderentes ao publico:", cursos.length, "(filtrados por publico:", removidosPeloFiltro + ")");
+  console.log("[Sebrae] recebidos:", brutos.length, "| gratuitos:", gratuitos.length, "| com 10h+:", comCarga.length, "| aderentes ao publico:", cursos.length, "(filtrados por publico:", removidosPeloFiltro + ")");
   cacheSebrae.cursos = cursos;
   return cursos;
 }
@@ -519,8 +519,8 @@ async function carregarSebraeEAtualizar(cidade, token){
       if(btn) selecionarArea(cidade, areaAtual, btn);
     }
     if(status) status.textContent = cursos.length
-      ? ("Cursos gratuitos do Sebrae SP ("+CARGA_MINIMA_H+"h+) carregados: "+cursos.length+".")
-      : "Nenhum curso gratuito do Sebrae SP com "+CARGA_MINIMA_H+"h+ encontrado.";
+      ? ("Cursos gratuitos do Sebrae SP (10h+) carregados: "+cursos.length+".")
+      : "Nenhum curso gratuito do Sebrae SP com 10h+ encontrado.";
   }catch(e){
     console.warn("[Sebrae] FALHOU:", e);
     if(token!==buscaToken) return;
@@ -532,9 +532,12 @@ async function carregarSebraeEAtualizar(cidade, token){
    PLANILHA MANUAL  ·  Google Sheets publicado como CSV
    - Cursos cadastrados manualmente pela equipe numa planilha do Google.
    - Colunas: municipio | curso | instituicao | modalidade | carga |
-              link | area | inscricoes_ate | status
+              link | area | inscricoes_de | inscricoes_ate | status | agente
+   - "inscricoes_de" (opcional): data em que as inscricoes abrem.
+     O curso aparece no site desde ja, com selo e o botao travado
+     ate a data chegar. Em branco = ja esta aberto.
    - Cursos com municipio "Online" aparecem em todas as cidades.
-   - Aplica o mesmo filtro de carga horaria >= CARGA_MINIMA_H.
+   - Aplica o mesmo filtro de carga horaria >= 10h.
    - Se a planilha nao responder, o portal continua funcionando normalmente.
    ===================================================================== */
 const cachePlanilha = { cursos: null };
@@ -574,12 +577,14 @@ function csvParaObjetos(text, campoObrigatorio){
 function normalizarCursoPlanilha(row){
   return {
     nome: row.curso || "",
-    inst: (row.instituicao||"") + (row.modalidade?" · "+row.modalidade:""),
+    inst: row.instituicao || "",
     modalidade: row.modalidade || "",
     carga: row.carga || "",
     link: row.link || "",
     _area: row.area || "",
     _municipio: row.municipio || "",
+    _de: row.inscricoes_de || "",
+    _agente: row.agente || "",
     _ate: row.inscricoes_ate || "",
     _status: row.status || "Aberto",
     _origem: row.origem || "",
@@ -602,8 +607,8 @@ async function buscarCursosPlanilha(){
       if(partes.length===3){ const d=new Date(partes[2],partes[1]-1,partes[0]); return isNaN(d.getTime())||d>=hoje0(); }
       const d=new Date(c._ate); return isNaN(d.getTime())||d>=hoje0();
     })
-    .filter(c => cursoAtingeCargaMinima(c.carga));                     // filtro de carga minima
-  console.log("[Planilha] cursos válidos ("+CARGA_MINIMA_H+"h+, abertos):", cursos.length, "| linhas no CSV:", rows.length);
+    .filter(c => cursoAtingeCargaMinima(c.carga));                     // filtro de 10h
+  console.log("[Planilha] cursos válidos (10h+, abertos):", cursos.length, "| linhas no CSV:", rows.length);
   cachePlanilha.cursos = cursos;
   return cursos;
 }
@@ -618,9 +623,9 @@ function mesclarPlanilha(cursos, cidade){
     const deVizinha = !daCidade && vizinhas.some(v=>normTxt(v)===mun);
     if(!daCidade && !deVizinha) return;
     const id = c._area ? classificar(c._area) : classificar(c.nome);
-    const sufixo = ehOnlineFlag ? " · online" : " · presencial em "+c._municipio;
+    const sufixo = ehOnlineFlag ? "" : " · "+c._municipio;
     const obj = Object.assign({}, c, {
-      inst: (c.inst||"")+(c.inst?"":" ")+sufixo,
+      inst: ((c.inst||"")+sufixo).replace(/^ · /,""),
       _deOutraCidade: deVizinha ? c._municipio : null
     });
     (DADOS_CIDADE[id] = DADOS_CIDADE[id] || {cursos:[],oportunidades:[]}).cursos.push(obj);
@@ -672,6 +677,7 @@ function normalizarVagaPlanilha(row){
     _area: row.area || "",
     _municipio: row.municipio || "",
     _status: row.status || "Aberto",
+    _agente: row.agente || "",
     _origem: row.origem || "",
     _planilha: true
   };
