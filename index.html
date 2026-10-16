@@ -22,9 +22,20 @@
 <link rel="stylesheet" href="css/estilo.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+<!-- autenticacao: fica DENTRO do head e so roda depois que a pagina montou.
+     Se o auth.js nao carregar, a pagina abre mesmo assim. -->
+<script src="js/auth.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    try {
+      if (window.Auth && typeof Auth.proteger === "function") Auth.proteger();
+    } catch (e) {
+      console.error("Falha ao executar Auth.proteger():", e);
+    }
+  });
+</script>
 </head>
-  <script src="js/auth.js"></script>
-  <script>Auth.proteger();</script>
 <body>
 
 <!-- barra de governo -->
@@ -141,7 +152,7 @@
     <div class="admin-aviso" role="note">
       <strong>Painel de cadastro manual de cursos e vagas.</strong>
       Os itens adicionados aqui são salvos diretamente na planilha do Google Sheets e ficam disponíveis para todos os visitantes.
-      Os cursos vindos do <strong>Trampolim SP</strong>, <strong>Sebrae SP</strong>, <strong>EVG</strong> e <strong>Fundação Bradesco</strong> são carregados ao vivo das plataformas oficiais e <strong>não podem ser editados ou removidos por aqui</strong>.
+      Os cursos vindos do <strong>Trampolim SP</strong>, <strong>Sebrae SP</strong>, <strong>EVG</strong>, <strong>Fundação Bradesco</strong> e <strong>Aprenda Mais (MEC)</strong> são carregados ao vivo das plataformas oficiais e <strong>não podem ser editados ou removidos por aqui</strong>.
     </div>
     <div class="admin-tabs"><button type="button" data-t="cursos" class="ativa">Cursos</button><button type="button" data-t="vagas">Vagas</button></div>
     <div id="admin-form"></div>
@@ -168,6 +179,7 @@
 <script src="dados/mapa-pontos.js"></script>
 <script src="dados/cursos-evg.js"></script>
 <script src="dados/cursos-bradesco.js"></script>
+<script src="dados/cursos-aprenda-mais.js"></script>
 
 <!-- aplicacao (a ordem importa: app.js precisa ser o ultimo) -->
 <script src="js/config.js"></script>
@@ -177,7 +189,7 @@
 <script src="js/admin.js"></script>
 <script src="js/app.js"></script>
 <script src="js/analytics.js"></script>
-  <script src="js/aviso.js"></script>
+<script src="js/aviso.js"></script>
 
 </body>
 </html>
