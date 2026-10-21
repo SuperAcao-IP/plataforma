@@ -76,6 +76,21 @@ const PLANILHA_VAGAS_ATIVA = true;
    olhe a URL — o número após "#gid=" é o valor (ex: gid=123456789). */
 const PLANILHA_VAGAS_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQr5CRyAxIwluOeHE50A6TCG7RS3ua1AClEye3Q5zUEL-QOZ0PGzlijAe66nFKb_mYPS7Y8jkHqEaNu/pub?gid=934841184&single=true&output=csv";
 
+/* Aba "pontos_digitais" da mesma planilha: lugares com computador/internet cadastrados pela equipe.
+   Colunas: municipio | tipo | nome | endereco | bairro | recursos | horario | gratuito | telefone |
+            observacao | status | verificado_em | lat | lon      (lat/lon opcionais).
+   Vazio = camada só com as bibliotecas do cadastro estadual. Aba criada e publicada (gid 2024706523);
+   se criar outra aba, cole aqui o link CSV dela (mesmo formato dos de cima, com o gid da aba). */
+const PLANILHA_PONTOS_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQr5CRyAxIwluOeHE50A6TCG7RS3ua1AClEye3Q5zUEL-QOZ0PGzlijAe66nFKb_mYPS7Y8jkHqEaNu/pub?gid=2024706523&single=true&output=csv";
+
+/* Aba "servicos" da mesma planilha: CRAS, CREAS, PAT, Sebrae Aqui e outros serviços de apoio cadastrados pela equipe
+   (somam-se aos do mapa de campo e aos das fontes oficiais, sem duplicar o mesmo lugar).
+   Colunas: municipio | tipo | nome | endereco | bairro | horario | telefone | status | lat | lon
+            (tipo: CRAS, CREAS, PAT, Sebrae Aqui ou outro; status: Ativo, ou Fechado/Encerrado para esconder; lat/lon opcionais).
+   Vazio = DESLIGADO (a camada usa só o mapa de campo e as fontes oficiais). Ligado (gid 676188309); se a aba mudar,
+   troque aqui o link CSV dela (com o gid da aba). */
+const PLANILHA_SERVICOS_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQr5CRyAxIwluOeHE50A6TCG7RS3ua1AClEye3Q5zUEL-QOZ0PGzlijAe66nFKb_mYPS7Y8jkHqEaNu/pub?gid=676188309&single=true&output=csv";
+
 /* ---------- regras de conteudo ---------- */
 /* --- carga horaria minima: exclui cursos com menos de 15h ---
    Este valor vale para TODAS as fontes de cursos (Trampolim, Sebrae,
@@ -90,6 +105,33 @@ function cargaEmHoras(carga){
 function cursoAtingeCargaMinima(carga){
   const h = cargaEmHoras(carga);
   return h==null ? true : h >= CARGA_MINIMA_H;
+}
+/* 15h a 19h: aceito, mas abaixo das 20h ideais. A tela marca com "(15–19h)". */
+function cargaNaFaixaTolerada(carga){
+  const h = cargaEmHoras(carga);
+  return h!=null && h >= CARGA_MINIMA_H && h < 20;
+}
+
+/* --- filtro de publico: so catalogos fixos (EVG, Bradesco, Aprenda Mais) ---
+   true  = mostra apenas os cursos listados em dados/filtro-publico.js
+   false = mostra os catalogos inteiros (nada foi apagado)
+   O curso e reconhecido pelo TITULO, nao pelo link: o link do Aprenda Mais muda a cada turma.
+   normalizarTitulo() deve ficar igual a scripts/lib/util.js. */
+const FILTRAR_PUBLICO_FAMILIAS = true;
+function normalizarTitulo(t){
+  return String(t==null?"":t).normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase()
+    .replace(/\s+-\s+turmas?\s+\d{4}[ab]\s*$/i,"").replace(/\s+/g," ").trim();
+}
+const _PERMITIDOS_CACHE = {};
+/* fonte: "aprendaMais" | "bradesco" | "evg" */
+function catalogoPermitido(lista, fonte){
+  if(!FILTRAR_PUBLICO_FAMILIAS) return lista;
+  if(typeof TITULOS_PERMITIDOS === "undefined" || !TITULOS_PERMITIDOS[fonte]){
+    console.warn("dados/filtro-publico.js nao carregou: catalogo "+fonte+" sem filtro");
+    return lista;
+  }
+  const ok = _PERMITIDOS_CACHE[fonte] || (_PERMITIDOS_CACHE[fonte] = new Set(TITULOS_PERMITIDOS[fonte]));
+  return lista.filter(c=>ok.has(normalizarTitulo(c.titulo)));
 }
 
 /* === Cidades vizinhas: cursos e vagas compartilhados ===
@@ -187,6 +229,8 @@ async function carregarDados(){
 function ehDaCidade(v,cidade){ return (v||"").trim().toLowerCase()===cidade.toLowerCase(); }
 function ehOnline(v){ return (v||"").trim().toLowerCase().startsWith("online"); }
 function hoje0(){ const d=new Date(); d.setHours(0,0,0,0); return d; }
-function aberto(status,ate){ if((status||"").toLowerCase()==="encerrado") return false; if(ate){ const d=new Date(ate); if(!isNaN(d.getTime()) && d<hoje0()) return false; } return true; }
+/* status "Encerrado" ou "Fechado" (a equipe usa os dois) = não aparece */
+function statusFechado(status){ return /^\s*(encerrad|fechad)/i.test(status||""); }
+function aberto(status,ate){ if(statusFechado(status)) return false; if(ate){ const d=new Date(ate); if(!isNaN(d.getTime()) && d<hoje0()) return false; } return true; }
 function matchArea(nome){ const norm=s=>(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().toLowerCase(); const n=norm(nome); const a=AREAS.find(a=>norm(a.nome)===n); return a?a.id:classificar(nome); }
 function urlValida(u){ u=(u||"").trim(); if(!/^https?:\/\//i.test(u)) return false; try{ new URL(u); return true; }catch(e){ return false; } }

@@ -197,7 +197,6 @@ window.addEventListener('load', function(){ window.__mostrarErros(); });
 </style>
 </head>
 <body>
-   <script src="js/aviso.js"></script>
 
 <!-- ENTRADA -->
 <div class="porta" id="porta">
@@ -442,6 +441,10 @@ window.addEventListener('load', function(){ window.__mostrarErros(); });
 <!-- arquivos do próprio portal, usados pelas abas de catálogo -->
 <script src="dados/cursos-evg.js"></script>
 <script src="dados/cursos-bradesco.js"></script>
+<script src="dados/cursos-aprenda-mais.js"></script>
+<script src="dados/cursos-ifmg.js"></script>
+<script src="dados/cursos-mundi.js"></script>
+<script src="dados/filtro-publico.js"></script>
 <script src="js/config.js"></script>
 <script src="js/areas.js"></script>
 <script src="js/conectores.js"></script>
@@ -993,7 +996,10 @@ window.addEventListener('load', function(){ window.__mostrarErros(); });
         ['CURSOS_EVG','Escola Virtual de Governo'], ['EVG_CURSOS','Escola Virtual de Governo'],
         ['cursosEVG','Escola Virtual de Governo'], ['CURSOS_ONLINE_EVG','Escola Virtual de Governo'],
         ['CURSOS_BRADESCO','Fundação Bradesco'], ['BRADESCO_CURSOS','Fundação Bradesco'],
-        ['cursosBradesco','Fundação Bradesco'], ['CURSOS_ONLINE_BRADESCO','Fundação Bradesco']
+        ['cursosBradesco','Fundação Bradesco'], ['CURSOS_ONLINE_BRADESCO','Fundação Bradesco'],
+        ['EVG','Escola Virtual de Governo'], ['EV','Fundação Bradesco'],
+        ['APRENDA_MAIS','Aprenda Mais · MEC'],
+        ['IFMG','+IFMG'], ['MUNDI','Mundi · IFSul']
       ];
       var vistos = {};
       CANDIDATOS.forEach(function(par){
@@ -1004,13 +1010,15 @@ window.addEventListener('load', function(){ window.__mostrarErros(); });
         if(vistos[par[1]]) return;
         vistos[par[1]] = 1;
         var n = 0;
+        var fonteFiltro = {EVG:'evg', EV:'bradesco', APRENDA_MAIS:'aprendaMais', IFMG:'ifmg', MUNDI:'mundi'}[par[0]];
+        if(fonteFiltro && typeof catalogoPermitido === 'function') v = catalogoPermitido(v, fonteFiltro);   // filtro de público (famílias)
         v.forEach(function(c){
           var nome = c.nome || c.curso || c.name || c.titulo || '';
           if(!nome) return;
           addCurso({
             municipio:'Online', curso:nome, inst:c.inst || c.instituicao || par[1],
             modalidade:c.modalidade || 'Online', carga:c.carga || c.carga_horaria || '',
-            area:nomeArea(c._area ? classificar(c._area) : classificar(nome)),
+            area:nomeArea(areaDoCurso(nome, c._area || c.area)),
             fonte:par[1], link:c.link || c.url || '', ate:c.inscricoes_ate || ''
           });
           n++;
@@ -1211,5 +1219,6 @@ window.addEventListener('load', function(){ window.__mostrarErros(); });
 
 })();
 </script>
+   <script src="js/aviso.js"></script>
 </body>
 </html>

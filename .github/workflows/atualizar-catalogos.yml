@@ -1,0 +1,79 @@
+name: Atualizar catálogos
+
+# Toda segunda-feira, 06h em Brasília (09h UTC), ou na hora pelo botão "Run workflow".
+# Coleta Aprenda Mais, EVG e Bradesco, aplica o filtro de público, confere links,
+# publica na main sozinho e abre uma issue com o resumo (só quando há mudança ou falha;
+# semana sem novidade não gera issue). Se a coleta falhar ou vier
+# vazia, não publica nada: o catálogo anterior continua no ar.
+on:
+  schedule:
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: atualizar-catalogos
+  cancel-in-progress: false
+
+jobs:
+  atualizar:
+    # não roda em fork
+    if: ${{ !github.event.repository.fork }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Coletar, filtrar e conferir links
+        id: coleta
+        continue-on-error: true
+        run: node scripts/atualizar-catalogos.js --relatorio relatorio-atualizacao.md
+
+      - name: Publicar na main
+        if: ${{ steps.coleta.outcome == 'success' && steps.coleta.outputs.publicar == 'true' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dados
+          git commit -m "Atualização automática dos catálogos ($(date -u +%F))"
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      # só abre issue quando houve mudança publicada, falha de alguma fonte ou falha geral
+      - name: Abrir issue com o resumo
+        if: ${{ always() && (steps.coleta.outcome != 'success' || steps.coleta.outputs.publicar == 'true' || steps.coleta.outputs.parcial == 'true') }}
+        env:
+          RESULTADO: ${{ steps.coleta.outcome }}
+          PUBLICAR: ${{ steps.coleta.outputs.publicar }}
+          PARCIAL: ${{ steps.coleta.outputs.parcial }}
+          FONTES_COM_FALHA: ${{ steps.coleta.outputs.fontes_com_falha }}
+        run: |
+          if [ "$RESULTADO" = "success" ]; then
+            if [ "$PUBLICAR" = "true" ]; then SITUACAO="publicado"; else SITUACAO="sem mudanças"; fi
+            if [ "$PARCIAL" = "true" ]; then SITUACAO="$SITUACAO, mas FALHOU: $FONTES_COM_FALHA (versão anterior mantida)"; fi
+          else
+            SITUACAO="FALHOU, nada foi publicado"
+          fi
+          if [ ! -s relatorio-atualizacao.md ]; then
+            echo "O script não gerou relatório. Veja o log da execução: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" > relatorio-atualizacao.md
+          fi
+          echo "" >> relatorio-atualizacao.md
+          echo "[Log da execução](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})" >> relatorio-atualizacao.md
+          head -c 60000 relatorio-atualizacao.md > corpo-issue.md
+          gh label create catalogo-automatico --color 0E8A16 --description "Resumo da atualização automática dos catálogos" 2>/dev/null || true
+          gh issue create --title "Catálogos $(date -u +%F): ${SITUACAO}" --body-file corpo-issue.md --label catalogo-automatico
+
+      - name: Marcar a execução como falha se a coleta falhou
+        if: ${{ steps.coleta.outcome == 'failure' }}
+        run: exit 1

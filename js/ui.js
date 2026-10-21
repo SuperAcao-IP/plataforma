@@ -33,19 +33,26 @@ async function montarDados(cidade){
   /* Cada fonte de cursos online e opcional: se o arquivo de dados nao
      carregar (404, nome errado), a lista vira vazia e a pagina continua
      funcionando com as outras fontes, em vez de travar em "Carregando". */
-  const EVG_LISTA = (typeof EVG !== "undefined" && Array.isArray(EVG)) ? EVG : [];
-  const EV_LISTA  = (typeof EV  !== "undefined" && Array.isArray(EV))  ? EV  : [];
-  const AM_LISTA  = (typeof APRENDA_MAIS !== "undefined" && Array.isArray(APRENDA_MAIS)) ? APRENDA_MAIS : [];
+  const EVG_LISTA = (typeof EVG !== "undefined" && Array.isArray(EVG)) ? catalogoPermitido(EVG,"evg") : [];
+  const EV_LISTA  = (typeof EV  !== "undefined" && Array.isArray(EV))  ? catalogoPermitido(EV,"bradesco")  : [];
+  const AM_LISTA  = (typeof APRENDA_MAIS !== "undefined" && Array.isArray(APRENDA_MAIS)) ? catalogoPermitido(APRENDA_MAIS,"aprendaMais") : [];
   if(!EVG_LISTA.length) console.warn("Lista EVG nao carregou (dados/cursos-evg.js)");
   if(!EV_LISTA.length)  console.warn("Lista Bradesco nao carregou (dados/cursos-bradesco.js)");
   if(!AM_LISTA.length)  console.warn("Lista Aprenda Mais nao carregou (dados/cursos-aprenda-mais.js)");
+  /* Institutos Federais: fontes opcionais, mesmo filtro por titulo */
+  const IFMG_LISTA  = (typeof IFMG  !== "undefined" && Array.isArray(IFMG))  ? catalogoPermitido(IFMG,"ifmg")   : [];
+  const MUNDI_LISTA = (typeof MUNDI !== "undefined" && Array.isArray(MUNDI)) ? catalogoPermitido(MUNDI,"mundi") : [];
 
   EVG_LISTA.forEach(c=>add(areaDoCurso(c.titulo, c.area),"cursos",
     {nome:c.titulo, inst:c.inst+" · EVG", modalidade:"Online", carga:c.carga, link:c.link}));
   EV_LISTA.forEach(c=>add(areaDoCurso(c.titulo, c.area),"cursos",
     {nome:c.titulo, inst:"Fundação Bradesco · Escola Virtual", modalidade:"Online", carga:c.carga, link:c.link}));
   AM_LISTA.forEach(c=>add(areaDoCurso(c.titulo, c.area),"cursos",
-    {nome:c.titulo, inst:"Aprenda Mais · MEC (online, gratuito)", modalidade:"Online", carga:"40h", link:c.link}));
+    {nome:c.titulo, inst:"Aprenda Mais · MEC (online, gratuito)", modalidade:"Online", carga:c.carga, link:c.link}));
+  IFMG_LISTA.forEach(c=>add(areaDoCurso(c.titulo, c.area),"cursos",
+    {nome:c.titulo, inst:"Instituto Federal de Minas Gerais · +IFMG (online, gratuito)", modalidade:"Online", carga:c.carga, link:c.link}));
+  MUNDI_LISTA.forEach(c=>add(areaDoCurso(c.titulo, c.area),"cursos",
+    {nome:c.titulo, inst:"Instituto Federal Sul-rio-grandense · Mundi (online, gratuito)", modalidade:"Online", carga:c.carga, link:c.link}));
 
   /* cursos manuais (dados.json) */
   (DADOS.cursos||[]).forEach(c=>{
@@ -65,6 +72,11 @@ async function montarDados(cidade){
   });
 }
 function conteudoDaArea(id){ return DADOS_CIDADE[id]||{cursos:[],oportunidades:[]}; }
+/* maior carga primeiro; carga desconhecida vai para o fim; empate mantem a ordem original */
+function cargaOrdem(c){ const v=cargaEmHoras(c.carga); return v==null?-1:v; }
+function ordenarPorCarga(cursos){
+  return cursos.map((c,i)=>({c,i})).sort((a,b)=>cargaOrdem(b.c)-cargaOrdem(a.c)||a.i-b.i).map(x=>x.c);
+}
 function areasComConteudo(){ return todasAreas().filter(a=>{const c=DADOS_CIDADE[a.id]; return c&&(c.cursos.length||c.oportunidades.length);}); }
 
 async function selecionarCidade(cidade){
@@ -108,6 +120,8 @@ function renderAreasGrade(cidade){
   });
   /* as fontes chegam em etapas; com busca aberta, refaz com o que ja veio */
   if(typeof renderBusca === "function") renderBusca();
+  /* o mapa também precisa saber dos cursos que chegam em etapas (endereço do Trampolim, planilha) */
+  if(typeof atualizarCamadasMapa === "function") atualizarCamadasMapa();
 }
 function renderCidade(cidade){
   const alvo=document.getElementById("painelCidade");
@@ -121,14 +135,10 @@ function renderCidade(cidade){
     </div>
     <div class="bloco">
       <details class="mapa-suspenso" id="mapaSuspenso" open>
-        <summary class="bloco-titulo mapa-summary"><span class="ic azul"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18 3 21V6l6-3 6 3 6-3v15l-6 3-6-3Z"/><path d="M9 3v15M15 6v15"/></svg></span><div><h3>Mapa de ${cidade}</h3><p>Pontos reais do seu My Maps: cursos (verde), empregadores (roxo) e serviços (rosa).</p></div><span class="toggle-lbl"></span><svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></summary>
+        <summary class="bloco-titulo mapa-summary"><span class="ic azul"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18 3 21V6l6-3 6 3 6-3v15l-6 3-6-3Z"/><path d="M9 3v15M15 6v15"/></svg></span><div><h3>Mapa de ${cidade}</h3><p>Serviços de apoio (CRAS, PAT, Sebrae Aqui), escolas com cursos presenciais e lugares com computador ou internet. Ligue e desligue as camadas abaixo do mapa.</p></div><span class="toggle-lbl"></span><svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></summary>
         <div class="mapa-card">
           <div id="mapaP" style="width:100%;height:440px;background:#dfe6f1"></div>
-          <div class="mapa-legenda">
-            <span style="display:inline-flex;align-items:center;gap:.4rem"><span style="width:11px;height:11px;border-radius:50%;background:#7CB342;border:2px solid #fff;box-shadow:0 0 0 1px #ccc"></span> Cursos</span>
-            <span style="display:inline-flex;align-items:center;gap:.4rem;margin-left:1rem"><span style="width:11px;height:11px;border-radius:50%;background:#673AB7;border:2px solid #fff;box-shadow:0 0 0 1px #ccc"></span> Empregadores</span>
-            <span style="display:inline-flex;align-items:center;gap:.4rem;margin-left:1rem"><span style="width:11px;height:11px;border-radius:50%;background:#C2185B;border:2px solid #fff;box-shadow:0 0 0 1px #ccc"></span> Serviços (CRAS, PAT, Sebrae Aqui)</span>
-          </div>
+          <div id="mapaCamadas" class="mapa-camadas" aria-label="Camadas do mapa"></div>
         </div>
       </details>
     </div>
@@ -281,7 +291,7 @@ function renderBusca(){
   const achados=todosCursosDaCidade()
     .map(c=>({c:c,nota:pontuarCurso(c,palavras)}))
     .filter(x=>x.nota>0)
-    .sort((a,b)=>b.nota-a.nota || (a.c.nome||"").localeCompare(b.c.nome||"","pt-BR"))
+    .sort((a,b)=>cargaOrdem(b.c)-cargaOrdem(a.c) || b.nota-a.nota || (a.c.nome||"").localeCompare(b.c.nome||"","pt-BR"))   // maior carga primeiro; relevancia desempata
     .map(x=>x.c);
   wrap.hidden=false;
 
@@ -332,12 +342,13 @@ function initMapa(cidade){
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"&copy; OpenStreetMap",maxZoom:19}).addTo(MAP);
     MAP.getPane("tilePane").style.filter="grayscale(1) contrast(.92) brightness(1.06)";
     const b=[];
-    ["curso","empregador","cras"].forEach(tp=>(d[tp]||[]).forEach(p=>{
-      L.circleMarker([p.lat,p.lon],{radius:8,color:"#fff",weight:2,fillColor:COR[tp],fillOpacity:1}).bindPopup("<b>"+p.n+"</b>").addTo(MAP);
-      b.push([p.lat,p.lon]);
-    }));
+    mapaBoundsBase=b;
+    // "curso" e "empregador" continuam em dados/mapa-pontos.js, mas não são mais mostrados; só "cras" (serviços),
+    // que vira a camada "Serviços" em js/mapa-camadas.js
+    (d.cras||[]).forEach(p=>b.push([p.lat,p.lon]));
     if(b.length) MAP.fitBounds(b,{padding:[40,40],maxZoom:14});
     MAP.invalidateSize();
+    if(typeof atualizarCamadasMapa === "function") atualizarCamadasMapa();
     const dtl=document.getElementById("mapaSuspenso");
     if(dtl) dtl.addEventListener("toggle",()=>{ if(dtl.open && MAP) setTimeout(()=>MAP.invalidateSize(),60); });
   },80);
@@ -348,7 +359,7 @@ function selecionarArea(cidade,areaId,btn){
   document.querySelectorAll(".area-btn").forEach(x=>x.setAttribute("aria-selected",x===btn?"true":"false"));
   const dica=document.getElementById("dicaArea"); if(dica) dica.style.display="none";
   const area=areaInfo(areaId), c=conteudoDaArea(areaId);
-  const cursosHTML=c.cursos.length?`<div class="lista">${c.cursos.map(cartaoCurso).join("")}</div>`:`<div class="vazio-area">Sem cursos nesta área.</div>`;
+  const cursosHTML=c.cursos.length?`<div class="lista">${ordenarPorCarga(c.cursos).map(cartaoCurso).join("")}</div>`:`<div class="vazio-area">Sem cursos nesta área.</div>`;
   const painel=document.getElementById("painelArea");
   painel.innerHTML=`
     <div class="painel-cabec"><span class="ico">${area.icone}</span><div><h3>${area.nome}</h3><p>${area.descricao}</p></div></div>
@@ -478,7 +489,7 @@ function cartaoCurso(c){
   const badgeVizinha = c._deOutraCidade
     ? `<div class="badge-outra-cidade"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#E65100" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7Z"/><circle cx="12" cy="9" r="2.5"/></svg> Curso disponível em ${esc(c._deOutraCidade)} (município vizinho)</div>`
     : "";
-  return `<div class="curso">${seloAbertura}${tagArea}${badgeVizinha}<div class="nome">${esc(c.nome)}</div>${c.inst?`<div class="inst"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V9l7-4 7 4v12M9 21v-6h6v6"/></svg> ${esc(c.inst)}</div>`:""}${c.desc?`<div class="desc">${esc(c.desc)}</div>`:""}<div class="meta">${c.modalidade?`<span class="item"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>${esc(c.modalidade)}</span>`:""}${c.turno?`<span class="item">🕗 ${esc(c.turno)}</span>`:""}${c.carga?`<span class="item">⏱ ${c.carga}</span>`:""}${c.bolsa?`<span class="item">🎓 Bolsa auxílio</span>`:""}</div>${acao?`<div class="rodape">${acao}</div>`:""}</div>`;
+  return `<div class="curso">${seloAbertura}${tagArea}${badgeVizinha}<div class="nome">${esc(c.nome)}</div>${c.inst?`<div class="inst"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V9l7-4 7 4v12M9 21v-6h6v6"/></svg> ${esc(c.inst)}</div>`:""}${c.desc?`<div class="desc">${esc(c.desc)}</div>`:""}<div class="meta">${c.modalidade?`<span class="item"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>${esc(c.modalidade)}</span>`:""}${c.turno?`<span class="item">🕗 ${esc(c.turno)}</span>`:""}${c.carga?`<span class="item">⏱ ${c.carga}${cargaNaFaixaTolerada(c.carga)?" (15–19h)":""}</span>`:""}${c.bolsa?`<span class="item">🎓 Bolsa auxílio</span>`:""}</div>${acao?`<div class="rodape">${acao}</div>`:""}</div>`;
 }
 function cartaoVaga(v){
   const rotulo = ehLinkMaps(v.link) ? "Local da vaga" : "Ver vaga";
