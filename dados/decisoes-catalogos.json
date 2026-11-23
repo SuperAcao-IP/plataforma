@@ -4622,6 +4622,30 @@
    "ativo": true,
    "c": "20h",
    "ar": "Tecnologia da Informação"
+  },
+  "gestao de materiais": {
+   "t": "Gestão de Materiais",
+   "d": "ocultar",
+   "o": "auto",
+   "m": "sem regra de manter (fora do perfil por padrão)",
+   "desde": "2026-11-23",
+   "pa": "estudantes de logística e empreendedores",
+   "rq": "compreensão de leitura em língua portuguesa e possuir equipamento com recursos de áudio e vídeo",
+   "ativo": true,
+   "c": "30h",
+   "ar": "Administração e Gestão"
+  },
+  "linux fundamental 1": {
+   "t": "Linux Fundamental 1",
+   "d": "ocultar",
+   "o": "auto",
+   "m": "TI técnica (programação, redes, dados, IA)",
+   "desde": "2026-11-23",
+   "pa": "estudantes e profissionais que atuam na área de tecnologia",
+   "rq": "conhecimentos básicos de informática e compreensão de leitura em língua portuguesa",
+   "ativo": true,
+   "c": "20h",
+   "ar": "Tecnologia da Informação"
   }
  },
  "evg": {
