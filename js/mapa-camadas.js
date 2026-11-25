@@ -339,7 +339,7 @@ function _opcoesPopup(mapa){
   return { maxWidth: largura, minWidth: Math.min(200, largura), autoPanPaddingTopLeft: [56, 16], autoPanPaddingBottomRight: [16, 16] };
 }
 function _iconeEscola(n){
-  return L.divIcon({ className: "pino-escola" + (n ? "" : " vazio"), html: "<span>" + (n || "·") + "</span>", iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -12] });
+  return L.divIcon({ className: "pino-escola" + (n ? "" : " vazio"), html: "<span><b>" + (n || "·") + "</b></span>", iconSize: [28, 28], iconAnchor: [14, 28], popupAnchor: [0, -26] });
 }
 function _popupServico(s){
   const linhas = [];
@@ -350,19 +350,30 @@ function _popupServico(s){
     (s.fonte && s.fonte !== "Mapa de campo" ? '<p class="pop-nota">Fonte: ' + _escM(s.fonte) + ". Confirme com o local antes de ir.</p>" : "") + "</div>";
 }
 function _iconeServico(){
-  return L.divIcon({ className: "pino-servico", html: "<span>S</span>", iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -11] });
+  return L.divIcon({ className: "pino-servico", html: "<span><b>S</b></span>", iconSize: [28, 28], iconAnchor: [14, 28], popupAnchor: [0, -26] });
 }
 /* ---------- camada "Vagas": posição APROXIMADA (grade de ≈ 1 km), sem rua nem número ---------- */
 function _iconeVaga(n){
   return L.divIcon({ className: "pino-vaga", html: "<span><b>" + n + "</b></span>", iconSize: [28, 28], iconAnchor: [14, 28], popupAnchor: [0, -26] });
 }
-/* vagas da cidade (Trampolim) agrupadas por posição aproximada: [{lat, lon, vagas:[...]}] */
+/* vagas da cidade agrupadas por posição aproximada: [{lat, lon, vagas:[...], porCidade}].
+   - Trampolim: grade de ≈ 1 km (_aprox).
+   - Robô, planilha e demais, que não trazem endereço: um pino no centro do município da vaga ("porCidade"). */
 function vagasParaMapa(){
   const todas = (typeof todasVagasDaCidade === "function") ? todasVagasDaCidade() : [];
   const grupos = new Map();
-  todas.filter(v => v._aprox).forEach(v => {
-    const k = v._aprox.lat.toFixed(2) + "," + v._aprox.lon.toFixed(2);
-    if(!grupos.has(k)) grupos.set(k, { lat: v._aprox.lat, lon: v._aprox.lon, vagas: [] });
+  todas.forEach(v => {
+    let lat, lon, k, porCidade = false;
+    if(v._aprox){
+      lat = v._aprox.lat; lon = v._aprox.lon; k = lat.toFixed(2) + "," + lon.toFixed(2);
+    } else {
+      if(/remot|home office/i.test(v.modalidade || "")) return;      // trabalho remoto não tem lugar no mapa
+      const nome = v.municipio || v._municipio || v.cidade || cidadeAtual;
+      const c = (typeof _centroDaCidade === "function") ? (_centroDaCidade(nome) || _centroDaCidade(cidadeAtual)) : null;
+      if(!c) return;
+      lat = c[0]; lon = c[1]; k = "cidade:" + _nm(nome); porCidade = true;
+    }
+    if(!grupos.has(k)) grupos.set(k, { lat, lon, vagas: [], porCidade });
     grupos.get(k).vagas.push(v);
   });
   return [...grupos.values()];
@@ -372,12 +383,12 @@ function _popupVagas(g){
   const onde = locais.length ? "Região de " + locais.slice(0, 3).map(_escM).join(" / ") + (locais.length > 3 ? " e outras" : "") : "Região aproximada";
   const itens = g.vagas.map(v => {
     const link = (typeof urlValida === "function" && urlValida(v.link)) ? ' <a class="btn-vaga-mapa" href="' + _escM(v.link) + '" target="_blank" rel="noopener noreferrer">Ver vaga</a>' : "";
-    return "<li><b>" + _escM(v.cargo || "Vaga") + "</b><br><span>" + _escM(v.empresaNome || "Empresa anônima") + "</span>" + link + "</li>";
+    return "<li><b>" + _escM(v.cargo || "Vaga") + "</b><br><span>" + _escM(v.empresaNome || v.empresa || "Empresa anônima") + "</span>" + link + "</li>";
   }).join("");
-  return '<div class="pop-mapa"><b>' + g.vagas.length + " vaga" + (g.vagas.length > 1 ? "s" : "") + " nesta região</b><br><span>" + onde + "</span><ul>" + itens + '</ul><p class="pop-nota">Posição aproximada da região, não é o endereço da empresa.</p></div>';
+  return '<div class="pop-mapa"><b>' + g.vagas.length + " vaga" + (g.vagas.length > 1 ? "s" : "") + " nesta região</b><br><span>" + onde + "</span><ul>" + itens + '</ul><p class="pop-nota">' + (g.porCidade ? 'Estas vagas não informam o endereço: o pino fica no centro do município.' : 'Posição aproximada da região, não é o endereço da empresa.') + '</p></div>';
 }
 function _iconePonto(p){
-  return L.divIcon({ className: "pino-pc " + (p.computador ? "pc" : "wifi"), html: "<span>" + (p.computador ? "PC" : "Wi") + "</span>", iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -11] });
+  return L.divIcon({ className: "pino-pc " + (p.computador ? "pc" : "wifi"), html: "<span><b>" + (p.computador ? "PC" : "Wi") + "</b></span>", iconSize: [28, 28], iconAnchor: [14, 28], popupAnchor: [0, -26] });
 }
 
 function _montarControleCamadas(){
@@ -437,6 +448,7 @@ async function _atualizarCamadasMapa(){
   CAMADAS_MAPA = { cidade, servicos: gS, vagas: gV, escolas: gE, computador: gP, nServicos: servicos.length, nVagas: gruposVagas.reduce((a, g) => a + g.vagas.length, 0), nEscolas: unidades.length, nPontos: pontos.length };
   _montarControleCamadas();
   _aplicarVisibilidade();
+  if(typeof atualizarResumo === "function") atualizarResumo();
   // enquadra UMA vez por mapa (na primeira vez que há pontos novos); depois não mexe no zoom da pessoa
   if(limites.length && _mapaEnquadrado !== mapa){
     _mapaEnquadrado = mapa;

@@ -11,7 +11,12 @@
 
    Para saber o quanto as regras concordam com as decisões já tomadas à mão:
    node scripts/validar-regras.js */
-const { normalizarTitulo } = require("./util");
+/* Roda no Node (scripts) e no NAVEGADOR (index.html e painel.html carregam este arquivo depois de js/config.js, para
+   filtrar os cursos do Trampolim que chegam ao vivo). No navegador tudo fica dentro desta função e só sai
+   window.RegrasCatalogo, para não colidir com as funções do portal (classificar, em js/areas.js). */
+(function(){
+const NODE = typeof module !== "undefined" && module.exports && typeof require === "function";
+const normalizarTitulo = NODE ? require("./util").normalizarTitulo : globalThis.normalizarTitulo;
 
 /* Tudo é testado sobre o título normalizado (sem acento, minúsculas). */
 const OCULTAR = [
@@ -55,6 +60,10 @@ const OCULTAR = [
     /(gestao|administracao) (estrategica|financeira|tributaria|de financas)|contabilidade (de custos|comercial|empresarial|publica)|direito (empresarial|publico|administrativo|tributario|autoral|do trabalho,|do trabalho:)|responsabilidade civil|legislacao (aplicada|fisco|empresarial|tributaria|turistica|escolar|cooperativista)|custos e orcamento|orcamento empresarial|escrita fiscal|textos (empresariais|oficiais)|cerimonial|resolucao de conflitos|constituicao e desenvolvimento|cooperativ\w*.*(gestao|governanca|financeira|estrategica|implementacao)|(gestao|governanca) (\w+ )?(de |em )?cooperativ\w*|logistica internacional|roteirizacao|supply chain|cadeia de suprimentos|custos logisticos|controle de transportes|limnologia|oceanografia|meteorologia|praticas em saude e seguranca/]
 ];
 
+/* Introdução a inteligência artificial (e Excel/marketing básico "com IA") passa: é o primeiro contato com a ferramenta.
+   Certificação de fabricante (Azure, AWS, Google Cloud), nuvem, programação e IA aplicada a programação continuam em "TI técnica". */
+const IA_INTRO = /^(?!.*(azure|aws|nuvem|cloud|ai-?d{3}|microsoft|fortinet|exploratoria|python|programacao|machine learning|desenvolvimento))(?:(introducao|fundamentos|nocoes|basic[oa]|iniciantes?)\b[^|]{0,40}\b(inteligencia artificial|ia generativa|\bia\b)|(inteligencia artificial|ia generativa)[^|]{0,30}\b(introducao|fundamentos|basica|basico)\b|excel basico com ia|marketing digital com inteligencia artificial)/;
+
 const MANTER = [
   ["cuidado e saúde básica",
     /primeiros socorros(?!.*profissionais)|saude (da|do) (crianca|mulher|homem|idoso|adolescente|trabalhador)|saude mental|cuidador\w*|cuidados? (com|para|de|na)|\bidosos?\b|\bgestantes?\b|puericultura|alimentacao saudavel|autocuidado|prevencao (de|do|da) (acidentes|violencia|drogas)|saude e seguranca no trabalho|protecao e cuidados|\bnr-?\d+|brigada de incendio|\bcipa\b/],
@@ -71,18 +80,38 @@ const MANTER = [
   ["inclusão",
     /\blibras\b|acessibilidade|inclusao digital/],
   ["informática do dia a dia",
-    /\bexcel\b|informatica basica|manutencao de computadores|montagem de computadores|alfabetizacao digital|cultura digital|\boffice\b|\bword\b|planilhas?|celular|smartphone|edicao de videos?|fotografia\w*|design grafico|canva/],
+    /\bexcel\b|informatica basica|manutencao de computadores|montagem de computadores|microcomputadores?|alfabetizacao digital|cultura digital|\boffice\b|\bword\b|planilhas?|celular|smartphone|edicao de videos?|fotografia\w*|design grafico|canva/],
   ["construção e reparos",
     /materiais de construcao|alvenaria|pintura|eletric(a|idade) (residencial|basica|predial)|hidraulica|instalac(oes|ao) (eletricas|hidraulicas)|pedreiro|carpintaria|marcenaria|reparos|manutencao (predial|residencial)|energia (solar|fotovoltaica)[^.]*residencial|fotovoltaica residencial/],
   ["alimentação",
     /panificacao|confeitaria|cardapios?|manipulacao de alimentos|higiene (e controle de qualidade )?de alimentos|conservacao de alimentos|alimentacao e nutricao|\bcozinhas?\b|culinaria|boas praticas (de|na|em) (manipulacao|alimentos|servicos de alimentacao)|\bsalgados\b|\bdoces\b/],
+  ["IA, introdução", IA_INTRO],
+
+  /* ofícios que o Senai e outras escolas oferecem como curso livre: dão renda e não exigem ensino médio */
+  ["costura e moda (ofício)",
+    /costureir\w*|modelagem e confeccao|moda pet|modelagem industrial|confeccao de (roupas|moda)/],
+  ["automotivo (ofício)",
+    /mecanico (auxiliar )?automotiv\w*|eletricista automotiv\w*|caracteristicas tecnicas de veiculos|veiculos leves/],
+  ["elétrica predial (ofício)",
+    /eletricista instalador|circuitos eletricos prediais|instalacoes? eletricas? prediais?|auxiliar de eletricista/],
+  ["construção (ofício)",
+    /pintor imobiliario|drywall|gesso acartonado|\bsanca\b|pintura predial/],
+  ["joias e semijoias (ofício)",
+    /confeccionador de joias|joalheria|semi ?joias|processos galvanicos/],
+  ["indústria (ofício de entrada)",
+    /ajustador mecanico|caldeireiro|\bsoldagem\b|soldador|montagem de paineis? eletricos?|inspetor de qualidade|^5s\b|^ferramentas da qualidade|operador de (injetoras?|maquinas?)\b|\bmetrologia\b|ajustagem/],
+  ["logística e rotinas administrativas",
+    /logistica reversa|rotinas administrativas/],
+  ["culinária que dá renda (datas e chocolate)",
+    /panetones?|ovos de pascoa|\btrufas?\b|\bchocolates?\b|\bbombons?\b/],
+
   /* culinária e estética acessíveis: cursos práticos que dão renda sem exigir escolaridade */
   ["culinária e confeitaria",
     /\bbolos?\b|\btortas?\b|\bdoces?\b|\bsalgad\w*|\b(paes|pao)\b|\bpizzas?\b|\bmassas? (artesanais|caseiras|frescas)|sobremesas?|\breceitas? (de|caseiras?|culinarias?|doces?|salgadas?|saudaveis|faceis|praticas?|para)\b|culinaria|\bcozinha (basica|brasileira|vegana|vegetariana|arabe|italiana|japonesa|caseira|pratica)\b|mise en place|estacao de trabalho|brigadeir\w*|chocolates?|sorvetes?|geleias?|compotas?|canapes|finger food|salgadinhos?|marmitas?|quentinhas?|\bbuffet\b|barista|bartender|coquetel|drinques?|churrasco|hamburguer|\blanches?\b/],
   ["beleza e estética (curso prático)",
     /maquiagem|\bunhas?\b|manicure|pedicure|nail art|sobrancelhas?|depilacao|\bcilios?\b|cabeleireir\w*|\bpenteados?\b|\btrancas?\b|barbearia|barbeiro|visagismo|cuidados com a pele|esteticista|estetica (facial|corporal|basica|capilar)|massagem (relaxante|modeladora|estetica)|drenagem linfatica|cabelos? (crespos?|cacheados?|afro)|\bescova\b|coloracao capilar|alisamento|micropigmentacao/],
   ["agricultura e produção rural familiar",
-    /agricultura|agroecolog\w*|horticultura|olericultura|fruticultura|frutas e hortalicas|frutiferas|pomares|piscicultura|aquicultura|\bpesca\b|pecuaria|bovinocultura|suinocultura|cunicultura|avicultura|apicultura|cafeicultura|cafeeiro|agroindustri\w*|processamento de (leite|carnes?)|abate e processamento|producao e industrializacao de alimentos|higiene agroindustrial|instalacoes agroindustriais|materias-primas de origem animal|bem-estar e ambiencia das aves|\bjardins?\b|jardinagem|viveiros|\bmudas\b|\bhorta\b|\bsolos\b|adubacao|\bpragas\b|defensivos|\bracoes\b|hidroponi\w*|compostagem|reciclagem|residuos solidos|educacao ambiental|seguranca agricola|\bcriacao de (galinhas?|aves|animais|peixes|coelhos?|porcos|suinos|bovinos|abelhas|caprinos|ovinos)\b|manejo e sanidade|producao de peixes/],
+    /agricultura|agroecolog\w*|horticultura|olericultura|fruticultura|frutas e hortalicas|frutiferas|pomares|piscicultura|aquicultura|\bpesca\b|pecuaria|bovinocultura|suinocultura|cunicultura|avicultura|apicultura|cafeicultura|cafeeiro|agroindustri\w*|processamento de (leite|carnes?)|abate e processamento|producao e industrializacao de alimentos|higiene agroindustrial|instalacoes agroindustriais|materias-primas de origem animal|bem-estar e ambiencia das aves|\bjardins?\b|jardinagem|viveiros|\bmudas\b|\bhorta\b|\bsolos\b|adubacao|\bpragas\b|defensivos|\bracoes\b|hidroponi\w*|compostagem|reciclagem|educacao ambiental(?!.*(climatica|desastre))|seguranca agricola|\bcriacao de (galinhas?|aves|animais|peixes|coelhos?|porcos|suinos|bovinos|abelhas|caprinos|ovinos)\b|manejo e sanidade|producao de peixes/],
   ["hotelaria, turismo e eventos",
     /recepcao e reserva|meios de hospedagem|lavanderia na hotelaria|camareira|garcom|alimentos e bebidas na hotelaria|eventos?: (layout e )?decoracao|eventos?: layout|governanca em hotelaria/],
   ["ofícios e serviços",
@@ -108,7 +137,10 @@ function classificar(titulo){
   const idioma = decidirIdioma(norm);
   if(idioma) return idioma;
 
-  for(const [motivo, re] of OCULTAR) if(re.test(norm)) return { d: "ocultar", m: motivo };
+  for(const [motivo, re] of OCULTAR){
+    if(motivo.startsWith("TI técnica") && IA_INTRO.test(norm)) continue;      // introdução a IA não é "TI técnica"
+    if(re.test(norm)) return { d: "ocultar", m: motivo };
+  }
 
   for(const [motivo, re] of MANTER){
     if(re.test(norm)) return { d: "manter", m: motivo };
@@ -168,4 +200,6 @@ function decidir(titulo, publico, requisitos){
   return r;
 }
 
-module.exports = { classificar, perfil, decidir, OCULTAR, MANTER };
+const API = { classificar, perfil, decidir, OCULTAR, MANTER };
+if(NODE) module.exports = API; else globalThis.RegrasCatalogo = API;
+})();

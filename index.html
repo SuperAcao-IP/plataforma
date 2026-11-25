@@ -7,17 +7,16 @@
 
 <!--
 ============================================================================
-  SUPERACAO SP  ·  VISUALIZACAO COM DADOS REAIS (sem backend)
+  SUPERACAO SP  ·  portal de cursos e vagas (site estatico, GitHub Pages)
 ============================================================================
-  Cursos online: coletados ao vivo da Escola Virtual de Governo.
-  Pontos do mapa: do seu My Maps de campo (KML). Nada inventado.
-  Esta versao e so para visualizar. A versao de producao le do Supabase.
+  De onde vem cada dado e como atualizar: README.md.
+  A ordem dos scripts no fim desta pagina importa: nao embaralhe.
 ============================================================================
 -->
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600;700;800;900&family=Mulish:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
 <link rel="stylesheet" href="css/estilo.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
@@ -40,11 +39,7 @@
 
 <!-- barra de governo -->
 <div class="gov">
-  <div class="container">
-    <b>Governo do Estado de São Paulo</b>
-    <span class="sep">·</span> Secretaria de Desenvolvimento Social
-    <span class="sep">·</span> Apoio técnico: <b>FGV</b>
-  </div>
+  <div class="container"><span>Governo do Estado de São Paulo · Secretaria de Desenvolvimento Social</span><span>Apoio técnico FGV</span></div>
 </div>
 
 
@@ -54,13 +49,18 @@
 <!-- hero -->
 <section class="hero">
   <div class="container">
-    <p class="lead" style="margin:0 0 .5rem; font-weight:800; font-size:clamp(1.02rem,2vw,1.2rem); color:#fff;">Cardápio de oportunidades</p>
-    <span class="selo">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-      Para supervisores e agentes do programa
-    </span>
-    <h1>Encontre <em>cursos</em> e <em>vagas de emprego</em> na sua cidade</h1>
-    <p class="lead">Busque o seu município, veja no mapa onde estão os cursos e serviços e descubra oportunidades de trabalho que combinam com cada área de formação.</p>
+    <div class="hero-topo">
+      <div class="hero-texto">
+      <p class="lead" style="margin:0 0 .5rem; font-weight:800; font-size:clamp(1.02rem,2vw,1.2rem); color:var(--azul);">Cardápio de oportunidades</p>
+      <span class="selo">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        Para supervisores e agentes do programa
+      </span>
+      <h1>Encontre <em>cursos</em> e <em>vagas de emprego</em> na sua cidade</h1>
+      <p class="lead">Busque o seu município, veja no mapa onde estão os cursos e serviços e descubra oportunidades de trabalho que combinam com cada área de formação.</p>
+      </div>
+      <img class="hero-img" src="img/agentes-supervisor.webp" width="2304" height="1536" alt="Uma agente mostra o cardápio de oportunidades no tablet para o supervisor do SuperAção SP">
+    </div>
 
     <!-- busca -->
     <div class="busca-wrap">
@@ -73,25 +73,6 @@
         <svg class="pin-sel" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
         <select id="cidadesSelect" class="cidade-select" aria-label="Selecione o município"></select>
         <svg class="chev-sel" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-      </div>
-    </div>
-
-    <!-- como funciona -->
-    <div class="passos">
-      <div class="passo">
-        <div class="n">1</div>
-        <h4>Escolha sua cidade</h4>
-        <p>Selecione o seu município na lista acima.</p>
-      </div>
-      <div class="passo">
-        <div class="n">2</div>
-        <h4>Veja o mapa e a área</h4>
-        <p>Abra o mapa e escolha uma área de cursos.</p>
-      </div>
-      <div class="passo">
-        <div class="n">3</div>
-        <h4>Cursos e vagas</h4>
-        <p>Confira os cursos e as vagas daquela área.</p>
       </div>
     </div>
   </div>
@@ -145,14 +126,20 @@
   </div>
 </footer>
 
-<button id="abrirAdmin" class="btn-admin" type="button">Administração</button>
+<div class="acoes-fixas">
+  <!-- painel de acompanhamento (acessos, catálogo, histórico): pede o e-mail institucional e a chave -->
+  <a class="btn-admin" href="painel.html">Administrativo</a>
+  <!-- cadastro de cursos e vagas na planilha (js/admin.js) -->
+  <button id="abrirAdmin" class="btn-adicionar" type="button">Adicionar cursos e vagas aqui</button>
+</div>
 <div id="admin" class="admin-overlay" hidden>
   <div class="admin-box">
-    <div class="admin-head"><h3>Painel administrativo</h3><button id="fecharAdmin" type="button">Fechar</button></div>
+    <div class="admin-head"><h3>Adicionar cursos e vagas</h3><button id="fecharAdmin" type="button">Fechar</button></div>
     <div class="admin-aviso" role="note">
-      <strong>Painel de cadastro manual de cursos e vagas.</strong>
+      <strong>Cadastro manual de cursos e vagas.</strong>
       Os itens adicionados aqui são salvos diretamente na planilha do Google Sheets e ficam disponíveis para todos os visitantes.
-      Os cursos vindos do <strong>Trampolim SP</strong>, <strong>Sebrae SP</strong>, <strong>EVG</strong>, <strong>Fundação Bradesco</strong> e <strong>Aprenda Mais (MEC)</strong> são carregados ao vivo das plataformas oficiais e <strong>não podem ser editados ou removidos por aqui</strong>.
+      Cadastre num município do programa ou numa <strong>cidade próxima</strong> (ex.: Rio Claro): o item aparece também para os municípios vizinhos dela.
+      Os cursos e vagas que chegam sozinhos (Trampolim SP, Sebrae SP, catálogos online, Senai, Senac e o robô de vagas) <strong>não podem ser editados ou removidos por aqui</strong>.
     </div>
     <div class="admin-tabs"><button type="button" data-t="cursos" class="ativa">Cursos</button><button type="button" data-t="vagas">Vagas</button></div>
     <div id="admin-form"></div>
@@ -190,6 +177,8 @@
 
 <!-- aplicacao (a ordem importa: app.js precisa ser o ultimo) -->
 <script src="js/config.js"></script>
+<script src="scripts/lib/regras.js"></script>
+<script src="dados/trampolim-decisoes.js"></script>
 <script src="js/areas.js"></script>
 <script src="js/conectores.js"></script>
 <script src="js/ui.js"></script>

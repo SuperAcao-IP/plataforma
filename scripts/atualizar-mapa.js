@@ -21,7 +21,7 @@ const path = require("path");
 const vm = require("vm");
 const { carregarCidades, km, RAIZ } = require("./lib/cidades");
 const { carregarCache, salvarCache, geocodificar, enderecoParaExibir } = require("./lib/geocodificar");
-const { coletarSenac, coletarSenacUnidades, coletarSenai } = require("./lib/coletores-mapa");
+const { coletarSenac, coletarSenacUnidades, coletarSenai, coletarSenaiCursos } = require("./lib/coletores-mapa");
 const { buscar } = require("./lib/util");
 
 const DADOS = path.join(RAIZ, "dados");
@@ -33,10 +33,13 @@ const iRel = args.indexOf("--relatorio");
 const ARQ_RELATORIO = path.resolve(iRel >= 0 ? args[iRel + 1] : path.join(RAIZ, "relatorio-mapa.md"));
 const HOJE = new Date().toISOString().slice(0, 10);
 const QUEDA_MAXIMA = 0.30;
-/* Coleta automática do site do Senac-SP: DESLIGADA. Os termos de uso do site proíbem acesso automatizado e
-   cópia dos dados sem consentimento. Só ligue (COLETAR_SENAC=1 ou --coletar-senac) com autorização por escrito do Senac.
-   Desligada, as unidades vêm do cadastro manual scripts/fontes/unidades-senac-cadastro.json (nome e endereço, sem cursos);
-   os cursos do Senac vêm da aba "cursos" da planilha. */
+/* Coleta automática do site do Senac-SP (unidades e cursos com bolsa): COLETAR_SENAC=1 ou --coletar-senac.
+   ATENÇÃO: os termos de uso do site do Senac proíbem acesso automatizado e cópia dos dados sem consentimento.
+   Em 19/11/2026 a equipe decidiu LIGAR a coleta no workflow semanal (.github/workflows/atualizar-mapa.yml), ciente disso;
+   o recomendado é pedir autorização por escrito ao Senac. A coleta é lenta de propósito (1 requisição por segundo, teto
+   de chamadas de detalhe) e para no primeiro 403 (um IP já foi bloqueado depois de ~3.000 requisições em 10 minutos).
+   Desligada, as unidades vêm do cadastro manual scripts/fontes/unidades-senac-cadastro.json (nome e endereço, sem cursos)
+   e os cursos do Senac vêm só da aba "cursos" da planilha. */
 const COLETAR_SENAC = process.env.COLETAR_SENAC === "1" || args.includes("--coletar-senac");
 
 /* ---------- o site como biblioteca: mesmas regras do navegador ---------- */
@@ -90,7 +93,12 @@ async function main(){
 
   /* ===== Senac ===== */
   let senac = unidadesAnt.filter(u => u.inst === "Senac"), senacRes = "mantido";
-  if(!COLETAR_SENAC && !IGNORAR.has("senac")){
+  /* Coleta feita no computador da equipe (o GitHub leva 503 do firewall do Senac): enquanto houver unidades coletadas
+     (id "senac-<código>", não "senac-manual-..."), a rodada do GitHub as MANTÉM em vez de voltar ao cadastro manual. */
+  const senacColetado = senac.some(u => !String(u.id).startsWith("senac-manual"));
+  if(!COLETAR_SENAC && !IGNORAR.has("senac") && senacColetado){
+    senacRes = "mantido da última coleta feita no computador da equipe (" + senac.length + " unidades, " + senac.reduce((a, u) => a + (u.cursos || []).length, 0) + " ofertas de curso)";
+  } else if(!COLETAR_SENAC && !IGNORAR.has("senac")){
     try{
       const cad = JSON.parse(fs.readFileSync(path.join(__dirname, "fontes", "unidades-senac-cadastro.json"), "utf8")).unidades || [];
       if(!cad.length) throw new Error("cadastro manual de unidades do Senac vazio");
@@ -127,7 +135,12 @@ async function main(){
       if(senac.length >= 5 && lista.length < senac.length * (1 - QUEDA_MAXIMA)) throw new Error(`só ${lista.length} unidades do Senac contra ${senac.length} da versão anterior (queda de mais de 30%)`);
       if(!lista.length) throw new Error("nenhuma unidade do Senac");
       senac = lista; senacRes = `${lista.length} unidades, ${lista.reduce((a, u) => a + u.cursos.length, 0)} ofertas de curso`;
-    }catch(e){ relatorio.falhas.push({ nome: "Senac", motivo: e.message }); senacRes = "FALHOU, mantida a versão anterior (" + senac.length + " unidades)"; console.error("  FALHOU:", e.message); }
+    }catch(e){
+      const recusou = /HTTP (403|429|503)|firewall/i.test(e.message);
+      const motivo = recusou ? "o site do Senac recusou o acesso automático ou estava fora do ar (" + (e.message.match(/HTTP \d+/) || ["erro"])[0] + "); os filtros nem chegaram a rodar" : e.message;
+      relatorio.falhas.push({ nome: "Senac", motivo });
+      senacRes = "FALHOU, mantida a versão anterior (" + senac.length + " unidades)"; console.error("  FALHOU:", e.message);
+    }
   }
 
   /* ===== Senai ===== */
@@ -137,14 +150,27 @@ async function main(){
       console.log("Senai: páginas de unidade…");
       const r = await coletarSenai(ctxFonte);
       console.log("  " + r.detalhe);
+      /* cursos presenciais gratuitos de cada unidade: se a lista de cursos falhar, ficam os cursos da versão anterior */
+      let cursosRes = "";
+      if(!IGNORAR.has("senai-cursos")){
+        console.log("Senai: cursos presenciais gratuitos de cada unidade…");
+        try{ cursosRes = (await coletarSenaiCursos(r.unidades)).detalhe; console.log("  " + cursosRes); }
+        catch(e){
+          relatorio.falhas.push({ nome: "Senai (cursos)", motivo: e.message });
+          const ant = new Map(senai.map(u => [u.id, u.cursos || []]));
+          r.unidades.forEach(u => { u.cursos = ant.get(u.id) || []; });
+          cursosRes = "lista de cursos FALHOU, mantidos os cursos da versão anterior";
+          console.error("  FALHOU:", e.message);
+        }
+      }
       const lista = [];
       for(const u of r.unidades){
         const g = await geocodificarUnidade(u);
-        if(g) lista.push({ id: u.id, inst: "Senai", nome: u.nome, endereco: [u.rua, u.numero].filter(Boolean).join(", ") + (u.bairro ? " – " + u.bairro : ""), cidade: u.cidade, lat: g.lat, lon: g.lon, link: u.link, psg: false, cursos: [] });
+        if(g) lista.push({ id: u.id, inst: "Senai", nome: u.nome, endereco: [u.rua, u.numero].filter(Boolean).join(", ") + (u.bairro ? " – " + u.bairro : ""), cidade: u.cidade, lat: g.lat, lon: g.lon, link: u.link, psg: false, cursos: u.cursos || [] });
       }
       if(senai.length >= 5 && lista.length < senai.length * (1 - QUEDA_MAXIMA)) throw new Error(`só ${lista.length} unidades do Senai contra ${senai.length} da versão anterior (queda de mais de 30%)`);
       if(!lista.length) throw new Error("nenhuma unidade do Senai");
-      senai = lista; senaiRes = `${lista.length} unidades`;
+      senai = lista; senaiRes = `${lista.length} unidades, ${lista.reduce((a, u) => a + u.cursos.length, 0)} cursos livres gratuitos` + (cursosRes ? ` (${cursosRes})` : "");
     }catch(e){ relatorio.falhas.push({ nome: "Senai", motivo: e.message }); senaiRes = "FALHOU, mantida a versão anterior (" + senai.length + " unidades)"; console.error("  FALHOU:", e.message); }
   }
 
@@ -210,7 +236,17 @@ async function main(){
     if(r.status !== 200) throw new Error("HTTP " + r.status);
     const rows = site.csvParaObjetos(r.texto, "curso", { apelidos: { nome: "curso", insituicao: "instituicao", carga_horaria: "carga", data_de_abertura: "inscricoes_de", validade: "inscricoes_ate" }, posicoes: { 0: "municipio", 6: "area" } })
       .filter(x => /presencial/i.test(x.modalidade || "") && x.municipio && !site.statusFechado(x.status));
-    vinculos = { total: rows.length, ok: 0, ambiguos: new Map(), semUnidade: new Map(), outras: new Map() };
+    vinculos = { total: rows.length, ok: 0, ambiguos: new Map(), semUnidade: new Map(), outras: new Map(), jaNaPlanilha: [], soNoRobo: [] };
+    /* cursos que o robô achou no site do Senai/Senac × cursos da planilha (mesma instituição, cidade e título) */
+    const nt = t => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const instDe = t => /senai/i.test(t || "") ? "senai" : /senac/i.test(t || "") ? "senac" : "";
+    const naPlanilha = new Set(rows.map(x => instDe(x.instituicao) + "|" + cid.norm(x.municipio) + "|" + nt(x.curso)));
+    for(const u of senac.concat(senai)){
+      for(const c of u.cursos || []){
+        const reg = `${c.n} · ${u.nome} (${u.cidade})`;
+        (naPlanilha.has(instDe(u.inst) + "|" + cid.norm(u.cidade) + "|" + nt(c.n)) ? vinculos.jaNaPlanilha : vinculos.soNoRobo).push(reg);
+      }
+    }
     for(const x of rows){
       const v = site.vincularCursoAUnidade(x.instituicao, x.municipio, unidades, x.unidade);
       if(v.unidade){ vinculos.ok++; continue; }
@@ -220,6 +256,17 @@ async function main(){
       reg.n++; alvo.set(k, reg);
     }
   }catch(e){ relatorio.notas.push("Não consegui conferir a aba cursos da planilha: " + e.message); }
+
+  /* ===== semanas seguidas com falha do Senac (dados/estado-coleta.json) ===== */
+  const arqEstado = path.join(DADOS, "estado-coleta.json");
+  const estadoColeta = fs.existsSync(arqEstado) ? JSON.parse(fs.readFileSync(arqEstado, "utf8")) : {};
+  if(COLETAR_SENAC && !IGNORAR.has("senac")){
+    const falhou = relatorio.falhas.some(f => f.nome === "Senac");
+    estadoColeta.senac_falhas_seguidas = falhou ? (estadoColeta.senac_falhas_seguidas || 0) + 1 : 0;
+    if(estadoColeta.senac_falhas_seguidas >= 2)
+      relatorio.notas.push(`O Senac falhou ${estadoColeta.senac_falhas_seguidas} semanas seguidas. Se continuar, vale desligar a coleta (tirar COLETAR_SENAC do .github/workflows/atualizar-mapa.yml): as unidades voltam ao cadastro manual e os cursos do Senac à planilha.`);
+    if(!SIMULAR) fs.writeFileSync(arqEstado, JSON.stringify(estadoColeta, null, 1) + "\n", "utf8");
+  }
 
   /* ===== gravação ===== */
   const nada = relatorio.falhas.length && !senac.length && !senai.length && !bibl.length;
@@ -231,7 +278,7 @@ async function main(){
   }
   const cab = (titulo, extra) => `/* ${titulo}\n   Gerado por scripts/atualizar-mapa.js · atualizado em ${HOJE}. Não edite à mão: a próxima execução sobrescreve.\n   ${extra} */\n`;
   gravarSeMudou("unidades.js",
-    cab("Unidades de ensino presencial (Senac e Senai) para o mapa, com os cursos de cada uma.", "Senac e Senai: só a unidade (cadastro manual do Senac); os cursos vêm da planilha.") +
+    cab("Unidades de ensino presencial (Senac e Senai) para o mapa, com os cursos de cada uma.", "Cursos: livres gratuitos do Senai e com bolsa do Senac (quando a coleta do Senac está ligada), filtrados pelas regras de público; os da planilha somam no navegador.") +
     "const UNIDADES = [\n" + linhasJson(unidades) + "\n];\n", relatorio.mudancas);
   gravarSeMudou("pontos-computador.js",
     cab("Lugares com computador e/ou Wi-Fi para o público (bibliotecas do cadastro estadual).", "Os pontos cadastrados à mão na aba pontos_digitais da planilha são lidos ao vivo pelo navegador.") +
@@ -281,6 +328,12 @@ function escrever(rel, res, semCoord, vinc, unidades, bibl){
     tab("Para a equipe preencher a coluna \"unidade\" da aba cursos (mais de uma unidade na cidade)", vinc.ambiguos, true);
     tab("Instituição da planilha sem unidade na cidade (conferir o município ou o nome da instituição)", vinc.semUnidade, false);
     tab("Instituições sem lista de unidades (precisam de endereço na planilha para virar ponto)", vinc.outras, false);
+    if(vinc.jaNaPlanilha.length + vinc.soNoRobo.length){
+      L.push(`## Cursos do robô (site do Senai/Senac) × planilha\n`);
+      L.push(`O robô achou ${vinc.jaNaPlanilha.length + vinc.soNoRobo.length} cursos gratuitos/com bolsa nas unidades. **${vinc.jaNaPlanilha.length}** já estão na aba "cursos" (no portal aparece só a versão da planilha); **${vinc.soNoRobo.length}** só o robô achou (aparecem no portal pelo robô; a equipe pode cadastrar se quiser completar dados como datas de inscrição).\n`);
+      if(vinc.jaNaPlanilha.length){ L.push("<details><summary>Já estão na planilha</summary>\n"); vinc.jaNaPlanilha.slice(0, 150).forEach(x => L.push("- " + x)); L.push("\n</details>\n"); }
+      if(vinc.soNoRobo.length){ L.push("<details><summary>Só o robô achou</summary>\n"); vinc.soNoRobo.slice(0, 150).forEach(x => L.push("- " + x)); L.push("\n</details>\n"); }
+    }
   }
   rel.notas.forEach(n => L.push("- " + n));
   fs.writeFileSync(ARQ_RELATORIO, L.join("\n") + "\n", "utf8");
