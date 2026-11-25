@@ -1,0 +1,62 @@
+{
+ "Gupy": {
+  "status": "OK",
+  "vagas": 5346,
+  "motivo": "",
+  "aprovadas": 332,
+  "funil": {
+   "repetida": 4905,
+   "título acima da entrada": 62,
+   "cargo fora das funções de entrada": 5,
+   "contrato": 13,
+   "exige ensino superior": 12,
+   "exige anos de experiência": 6,
+   "marcada como remota, mas o texto não confirma": 11
+  }
+ },
+ "Catho": {
+  "status": "OK",
+  "vagas": 816,
+  "motivo": "",
+  "aprovadas": 375,
+  "funil": {
+   "repetida": 396,
+   "contrato": 3,
+   "fora da região": 20,
+   "título acima da entrada": 4,
+   "exige ensino superior": 2,
+   "nota abaixo": 8,
+   "exige anos de experiência": 2,
+   "cargo fora das funções de entrada": 6
+  }
+ },
+ "InfoJobs": {
+  "status": "OK",
+  "vagas": 780,
+  "motivo": "",
+  "aprovadas": 290,
+  "funil": {
+   "exige anos de experiência": 15,
+   "repetida": 420,
+   "exige ensino superior": 6,
+   "título acima da entrada": 3,
+   "contrato": 6,
+   "cargo fora das funções de entrada": 5,
+   "fora da região": 33,
+   "nota abaixo": 2
+  }
+ },
+ "vagas.com": {
+  "status": "OK",
+  "vagas": 295,
+  "motivo": "",
+  "aprovadas": 6,
+  "funil": {
+   "repetida": 229,
+   "cargo fora das funções de entrada": 4,
+   "título acima da entrada": 10,
+   "exige ensino superior": 2,
+   "fora da região": 44
+  }
+ }
+}
