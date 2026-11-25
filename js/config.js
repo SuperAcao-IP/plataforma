@@ -2,19 +2,14 @@
    CONFIGURACAO  ·  URLs, flags de integracao e utilitarios base
    Para ligar/desligar uma fonte de dados, mexa so neste arquivo.
    ===================================================================== */
-/* =====================================================================
-   VERSAO DE VISUALIZACAO  ·  DADOS REAIS embutidos (sem Supabase)
-   - Cursos online: coletados ao vivo da Escola Virtual de Governo (EVG)
-   - Pontos do mapa: do seu My Maps de campo (KML da Catia), ja parseados
-   Nada aqui e inventado. Na producao, esses dados entram sozinhos pelo
-   Supabase alimentado pelos conectores.
-   ===================================================================== */
-console.log("%c[SuperAcao] build v9 · Trampolim + Sebrae + Planilha · "+new Date().toISOString(),"color:#0D5A94;font-weight:bold");
+/* De onde vem cada dado: tabela "De onde vêm os dados" no README.md.
+   Diagnóstico no console do navegador: abra o portal com ?debug no endereço. */
+if(typeof location!=="undefined" && /[?&]debug\b/.test(location.search)) console.log("%c[SuperAcao] diagnóstico ligado · "+new Date().toISOString(),"color:#0D5A94;font-weight:bold");
 
 const COR = { curso:"#7CB342", empregador:"#673AB7", cras:"#C2185B" };
 const DADOS_BASE="";
-/* URL do Google Apps Script que grava na planilha.
-   Substitua pela URL gerada ao implantar o Apps Script (veja apps-script-backend.gs). */
+/* URL do Google Apps Script que grava na planilha (cadastro do botão "Adicionar cursos e vagas aqui").
+   O script fica na própria planilha: Extensões > Apps Script. Se for reimplantado, cole aqui a URL nova. */
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxFku81pzX_0m-6G7sh45v3K_tJRHfqx9nLSaLVotuf0FUNiODpXLUdFqY_Ho38Y7Q/exec";
 
 /* ---------- integracao: Trampolim SP ---------- */
@@ -22,33 +17,33 @@ const TRAMPOLIM_ATIVO       = true;   // liga/desliga a integracao
 const TRAMPOLIM_PAGE_LIMIT  = 10;     // a API valida isto; 10 e o valor do exemplo que funciona (nao alterar sem testar)
 const TRAMPOLIM_MAX_PAGINAS = 80;     // trava de seguranca contra loop infinito
 /* ----------------------------------------------------------------------
-   CORS — escolha UM modo (a API fica em outro dominio, entao o navegador
-   exige um destes):
-
-   (A) PROXY LOCAL  [recomendado p/ teste: sem CORS, sem flag, sem terceiros]
-       rode o serve.js que acompanha este arquivo:   node serve.js
-       e mantenha:   TRAMPOLIM_BASE = "/trampolim"   +   TRAMPOLIM_CORS_PROXY = false
-       (o proprio servidor repassa a API na MESMA origem da pagina)
-
-   (B) DIRETO + Chrome sem seguranca [so teste]
-       TRAMPOLIM_BASE = "https://www.trampolim.sp.gov.br" ; CORS_PROXY = false
-       e abra o Chrome com --disable-web-security
-
-   (C) PROXY PUBLICO [instavel]
-       TRAMPOLIM_BASE = "https://www.trampolim.sp.gov.br" ; CORS_PROXY = true
-
-   PRODUCAO: sirva a pagina na mesma origem da API (ou repasse no seu backend);
-       TRAMPOLIM_BASE = "" (mesma origem) ou a URL real, com CORS_PROXY = false.
+   CORS: a API do Trampolim fica em outro domínio e não libera o navegador.
+   As chamadas passam pelo Worker da Cloudflare (TRAMPOLIM_BASE abaixo), que
+   repassa a API e libera a origem do GitHub Pages. Se os cursos do Trampolim
+   sumirem com erro de CORS no console, o problema está no Worker.
+   Alternativa só para teste (instável): TRAMPOLIM_BASE = TRAMPOLIM_SITE e
+   TRAMPOLIM_CORS_PROXY = true (usa proxies públicos).
    ---------------------------------------------------------------------- */
 const TRAMPOLIM_BASE        = "https://trampolim-proxy.beatrizgribas.workers.dev";  // base das CHAMADAS de API (Worker proxy na Cloudflare)
 const TRAMPOLIM_SITE        = "https://www.trampolim.sp.gov.br";  // dominio real -> links dos cursos
 const TRAMPOLIM_CORS_PROXY  = false;  // o Worker ja resolve o CORS; nao usa proxy publico
 const TRAMPOLIM_VAGAS_ATIVO = true;
-/* Raio das vagas (km): começa em VAGAS_RAIO_KM; se vierem menos de VAGAS_MINIMO vagas, amplia até VAGAS_RAIO_MAX_KM.
-   O link "Ver todas as vagas no Trampolim SP" continua com 50 km (js/ui.js). */
-const VAGAS_RAIO_KM = 15;
-const VAGAS_RAIO_MAX_KM = 30;
-const VAGAS_MINIMO = 8;
+/* Filtro de perfil nos cursos do Trampolim: as mesmas regras dos catálogos fixos (scripts/lib/regras.js) mais as
+   decisões à mão da equipe (dados/trampolim-decisoes.js). false = mostra todos os cursos do Trampolim. */
+const FILTRAR_TRAMPOLIM = true;
+/* ---------- Preparação para o mundo do trabalho (seção entre cursos e vagas) ----------
+   Os 4 links ficam aqui para ser fácil trocar. */
+const PREPARACAO_LINKS = {
+  conceitos:      "https://www.sp.senai.br/curso/preparacao-para-o-mundo-do-trabalho/92542",
+  socioemocional: "https://www.escolavirtual.gov.br/cursos/318",   // Inteligência Emocional (EVG, 50h) — já está no catálogo
+  curriculo:      TRAMPOLIM_SITE + "/cidadao/curriculo/",
+  entrevista:     TRAMPOLIM_SITE + "/pt/cidadao/preparador-entrevistas/"
+};
+
+/* ---------- robô de vagas (robo-vagas/, todo domingo) ----------
+   Vagas da Gupy, Catho, InfoJobs, vagas.com (e LinkedIn/Indeed, quando a busca roda no computador da equipe),
+   filtradas pelo perfil do programa e conferidas toda semana. O arquivo é dados/vagas-robo.json. */
+const VAGAS_ROBO_ATIVO = true;
 
 /* ---------- integracao: Sebrae SP ---------- */
 const SEBRAE_ATIVO        = true;   // liga/desliga a integracao
@@ -232,6 +227,60 @@ const CIDADES_VIZINHAS = {
   "São Vicente":            ["Santos", "Praia Grande", "Cubatão"]
 };
 
+/* Raio de busca proporcional ao porte do município (cursos e vagas).
+   Cidade grande já tem muita oferta própria: raio curto. Cidade pequena precisa buscar mais longe.
+   Nunca passa de RAIO_MAX_KM (15). Não amplia quando faltam vagas: aparece o aviso com os links do Trampolim e do SINE.
+   Porte aproximado (habitantes): grande > 500 mil · médio 100 a 500 mil · pequeno < 100 mil. Município fora da tabela = pequeno. */
+const RAIO_MAX_KM = 15;
+const RAIO_POR_PORTE = { grande: 5, medio: 10, pequeno: 15 };
+const PORTE_MUNICIPIO = {
+  "Campinas":"grande", "Guarulhos":"grande", "Osasco":"grande", "São Bernardo do Campo":"grande", "Santo André":"grande",
+  "Americana":"medio", "Araras":"medio", "Barueri":"medio", "Carapicuíba":"medio", "Cotia":"medio", "Diadema":"medio",
+  "Embu das Artes":"medio", "Indaiatuba":"medio", "Itaquaquecetuba":"medio", "Itatiba":"medio", "Itu":"medio",
+  "Jundiaí":"medio", "Limeira":"medio", "Mauá":"medio", "Paulínia":"medio", "Santa Bárbara d'Oeste":"medio",
+  "Santana de Parnaíba":"medio", "São Vicente":"medio", "Sumaré":"medio", "Taboão da Serra":"medio", "Valinhos":"medio"
+};
+function raioDoMunicipio(cidade){
+  const porte = PORTE_MUNICIPIO[cidade] || "pequeno";
+  return Math.min(RAIO_POR_PORTE[porte], RAIO_MAX_KM);
+}
+/* centro aproximado (±1 km) das cidades vizinhas que não estão no programa, só para medir distância */
+const CENTROS_VIZINHAS_EXTERNAS = {
+  "Rio Claro":[-22.4114,-47.5610], "Piracicaba":[-22.7253,-47.6492], "Leme":[-22.1808,-47.3841], "Hortolândia":[-22.8583,-47.2200],
+  "Cosmópolis":[-22.6419,-47.1908], "Capivari":[-22.9950,-47.5073], "Artur Nogueira":[-22.5728,-47.1725], "Amparo":[-22.7088,-46.7720],
+  "Mogi Guaçu":[-22.3689,-46.9428], "Itapira":[-22.4358,-46.8222], "Campo Limpo Paulista":[-23.2078,-46.7884], "Francisco Morato":[-23.2792,-46.7447],
+  "Atibaia":[-23.1171,-46.5563], "Salto":[-23.2000,-47.2869], "Sorocaba":[-23.5015,-47.4526], "Porto Feliz":[-23.2143,-47.5239],
+  "Vargem Grande Paulista":[-23.5997,-47.0237], "Jandira":[-23.5275,-46.9023], "Itapevi":[-23.5489,-46.9342], "Pirapora do Bom Jesus":[-23.3963,-47.0006],
+  "Itapecerica da Serra":[-23.7169,-46.8492], "Franco da Rocha":[-23.3220,-46.7255], "Mairiporã":[-23.3186,-46.5870], "São Caetano do Sul":[-23.6229,-46.5548],
+  "Ribeirão Pires":[-23.7106,-46.4136], "Suzano":[-23.5425,-46.3112], "Poá":[-23.5286,-46.3447], "Arujá":[-23.3964,-46.3208],
+  "Santos":[-23.9608,-46.3336], "Praia Grande":[-24.0058,-46.4028], "Cubatão":[-23.8950,-46.4256]
+};
+/* Cursos buscam mais longe que vagas (a família se desloca menos para trabalhar do que para um curso): mesmo porte, teto de 20 km. */
+const RAIO_CURSOS_MAX_KM = 20;
+const RAIO_CURSOS_POR_PORTE = { grande: 10, medio: 15, pequeno: 20 };
+function raioCursosDoMunicipio(cidade){
+  const porte = PORTE_MUNICIPIO[cidade] || "pequeno";
+  return Math.min(RAIO_CURSOS_POR_PORTE[porte], RAIO_CURSOS_MAX_KM);
+}
+function _centroDaCidade(nome){
+  const c = (typeof CENTROS_MUNICIPIOS!=="undefined") && CENTROS_MUNICIPIOS[nome];
+  if(c) return [c.lat, c.lon];
+  return CENTROS_VIZINHAS_EXTERNAS[nome] || null;
+}
+function _kmEntreCidades(a, b){
+  const p=_centroDaCidade(a), q=_centroDaCidade(b);
+  if(!p||!q) return Infinity;
+  const R=6371, rad=x=>x*Math.PI/180, dLat=rad(q[0]-p[0]), dLon=rad(q[1]-p[1]);
+  const h=Math.sin(dLat/2)**2+Math.cos(rad(p[0]))*Math.cos(rad(q[0]))*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(h));
+}
+/* vizinhas (CIDADES_VIZINHAS) que estão dentro do raio da cidade escolhida; sem coordenada, fica de fora */
+function vizinhasNoRaio(cidade, tipo){
+  const raio = tipo === "cursos" ? raioCursosDoMunicipio(cidade) : raioDoMunicipio(cidade);
+  return (CIDADES_VIZINHAS[cidade] || []).filter(v => _kmEntreCidades(cidade, v) <= raio);
+}
+
+
 /* ---------- dados manuais (dados.json) e utilitarios base ---------- */
 let DADOS=null;
 async function carregarDados(){
@@ -246,5 +295,5 @@ function hoje0(){ const d=new Date(); d.setHours(0,0,0,0); return d; }
 /* status "Encerrado" ou "Fechado" (a equipe usa os dois) = não aparece */
 function statusFechado(status){ return /^\s*(encerrad|fechad)/i.test(status||""); }
 function aberto(status,ate){ if(statusFechado(status)) return false; if(ate){ const d=new Date(ate); if(!isNaN(d.getTime()) && d<hoje0()) return false; } return true; }
-function matchArea(nome){ const norm=s=>(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().toLowerCase(); const n=norm(nome); const a=AREAS.find(a=>norm(a.nome)===n); return a?a.id:classificar(nome); }
+function matchArea(nome){ const norm=s=>(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().toLowerCase(); const n=norm(nome); const id=(typeof areaPorNome==="function")?areaPorNome(nome):null; if(id) return id; const a=AREAS.find(a=>norm(a.nome)===n); return a?a.id:classificar(nome); }
 function urlValida(u){ u=(u||"").trim(); if(!/^https?:\/\//i.test(u)) return false; try{ new URL(u); return true; }catch(e){ return false; } }

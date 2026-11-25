@@ -1,6 +1,6 @@
 /* =====================================================================
    APRENDA MAIS · MEC · cursos livres, gratuitos e 100% online
-   Coletado de aprendamais.mec.gov.br · atualizado em 2026-11-23 (421 cursos, turma 2026B).
+   Coletado de aprendamais.mec.gov.br · atualizado em 2026-11-24 (421 cursos, turma 2026B).
    Gerado por scripts/atualizar-catalogos.js: não edite à mão, a próxima coleta sobrescreve.
    O catálogo guarda TODOS os cursos; o que aparece no site está em dados/filtro-publico.js.
    Todos sao EaD, gratuitos e com certificacao do MEC. A carga horaria real de cada curso

@@ -1,13 +1,13 @@
 name: Atualizar catálogos
 
-# Toda segunda-feira, 06h em Brasília (09h UTC), ou na hora pelo botão "Run workflow".
+# Todo domingo, 06h em Brasília (09h UTC), ou na hora pelo botão "Run workflow".
 # Coleta Aprenda Mais, EVG e Bradesco, aplica o filtro de público, confere links,
 # publica na main sozinho e abre uma issue com o resumo (só quando há mudança ou falha;
 # semana sem novidade não gera issue). Se a coleta falhar ou vier
 # vazia, não publica nada: o catálogo anterior continua no ar.
 on:
   schedule:
-    - cron: "0 9 * * 1"
+    - cron: "7 9 * * 0"
   workflow_dispatch:
 
 permissions:
@@ -72,7 +72,10 @@ jobs:
           echo "[Log da execução](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})" >> relatorio-atualizacao.md
           head -c 60000 relatorio-atualizacao.md > corpo-issue.md
           gh label create catalogo-automatico --color 0E8A16 --description "Resumo da atualização automática dos catálogos" 2>/dev/null || true
-          gh issue create --title "Catálogos $(date -u +%F): ${SITUACAO}" --body-file corpo-issue.md --label catalogo-automatico
+          # fecha a issue anterior do mesmo tipo: fica aberta só a mais recente
+          ANTERIORES=$(gh issue list --label catalogo-automatico --state open --json number --jq '.[].number')
+          NOVA=$(gh issue create --title "Catálogos $(date -u +%F): ${SITUACAO}" --body-file corpo-issue.md --label catalogo-automatico)
+          for n in $ANTERIORES; do gh issue close "$n" --comment "Substituída por ${NOVA}." || true; done
 
       - name: Marcar a execução como falha se a coleta falhou
         if: ${{ steps.coleta.outcome == 'failure' }}

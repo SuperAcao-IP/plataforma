@@ -1,0 +1,137 @@
+name: Vigia semanal
+
+# O GitHub às vezes atrasa ou pula um agendamento (aconteceu na segunda 23/11: nenhum robô rodou e o e-mail não saiu).
+# Este vigia confere se cada robô semanal teve uma execução bem-sucedida nos últimos 3 dias e dispara o que faltou,
+# NA ORDEM CERTA: primeiro os que coletam (catálogos, mapa, vagas, uso), e só depois o histórico (que tira o retrato do que
+# foi coletado); quando o histórico termina, o resumo semanal roda e o e-mail sai. Se algo faltou, abre uma issue.
+#
+# Quando ele roda:
+#   - segunda e quarta, 09h07 em Brasília (agendamento do GitHub, que pode atrasar);
+#   - sempre que o arquivo .github/disparar-vigia.txt muda num push: o push roda na hora, sem depender do agendamento.
+#     A tarefa de segunda do computador da equipe (scripts/rodar-senac.ps1) faz esse push, então a semana é conferida
+#     mesmo que o GitHub falhe;
+#   - pelo botão "Run workflow" (por padrão só mostra o que faria; desmarque "ensaio" para disparar).
+on:
+  push:
+    paths:
+      - ".github/disparar-vigia.txt"
+  schedule:
+    - cron: "7 12 * * 1"       # segunda, 09h07 em Brasília
+    - cron: "7 12 * * 3"       # quarta, 09h07 (segunda chance)
+    - cron: "29 11 25 11 *"    # ÚNICO: 25/11/2026 08h29, só confere o resultado da recuperação; depois, apague
+  workflow_dispatch:
+    inputs:
+      ensaio:
+        description: "Só mostrar o que faria (não dispara nada)"
+        type: boolean
+        default: true
+
+permissions:
+  actions: write
+  issues: write
+  contents: write      # grava o relatório da última conferência em .github/vigia-ultimo.md
+
+concurrency:
+  group: vigia-semanal
+  cancel-in-progress: false
+
+jobs:
+  vigia:
+    if: ${{ !github.event.repository.fork }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      ENSAIO_MANUAL: ${{ github.event.inputs.ensaio == 'true' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: Conferir os robôs semanais e disparar o que faltou
+        run: |
+          ENSAIO=0
+          if [ "$ENSAIO_MANUAL" = "true" ]; then ENSAIO=1; fi
+          LIMITE_DIAS=3
+          AGORA=$(date -u +%s)
+          FALTOU=""
+          {
+            echo "## Vigia semanal $(date -u +%F)$([ $ENSAIO = 1 ] && echo ' (ENSAIO: não dispara nada)')"
+            echo ""
+            echo "| Robô | Última execução bem-sucedida | Situação |"
+            echo "|---|---|---|"
+          } | tee -a "$GITHUB_STEP_SUMMARY" > .github/vigia-ultimo.md
+
+          idade() {   # dias desde a última execução bem-sucedida do workflow $1 (999 = nunca)
+            local ult
+            ult=$(gh run list --workflow "$1.yml" --status success --limit 1 --json createdAt --jq '.[0].createdAt // ""')
+            if [ -z "$ult" ]; then echo 999; else echo $(( (AGORA - $(date -u -d "$ult" +%s)) / 86400 )); fi
+          }
+          registrar() { echo "$1: $2"; echo "| $1 | $3 | $2 |" | tee -a "$GITHUB_STEP_SUMMARY" >> .github/vigia-ultimo.md; }
+          esperar() {   # espera o disparo manual mais recente do workflow $1 terminar (consulta de 60 em 60 s; falha da API do GitHub não encerra a espera)
+            sleep 20
+            local rid st
+            rid=$(gh run list --workflow "$1.yml" --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId' 2>/dev/null)
+            [ -z "$rid" ] && return 0
+            while true; do
+              st=$(gh run view "$rid" --json status --jq .status 2>/dev/null) || st=""
+              [ "$st" = "completed" ] && return 0
+              sleep 60
+            done
+          }
+          disparar() {   # tenta de novo se a API do GitHub responder erro (já deu HTTP 500)
+            for i in 1 2 3 4 5; do gh workflow run "$1" && return 0; sleep 30; done
+            return 1
+          }
+
+          # 1) os que coletam, juntos
+          DISPARADOS=""
+          for w in atualizar-catalogos atualizar-mapa buscar-vagas atualizar-uso; do
+            d=$(idade "$w"); q="há $d dia(s)"; [ "$d" = "999" ] && q="nunca"
+            if [ "$d" -gt "$LIMITE_DIAS" ]; then
+              FALTOU="$FALTOU $w"
+              if [ "$ENSAIO" = "1" ]; then registrar "$w" "FALTOU: no modo normal eu dispararia" "$q"
+              else disparar "$w.yml" && { registrar "$w" "FALTOU: disparei" "$q"; DISPARADOS="$DISPARADOS $w"; } || registrar "$w" "FALTOU: não consegui disparar" "$q"; fi
+            else registrar "$w" "ok" "$q"; fi
+          done
+          for w in $DISPARADOS; do echo "Esperando $w terminar..."; esperar "$w"; done
+
+          # 2) o histórico tira o retrato DEPOIS da coleta (e roda de novo se algo acabou de ser coletado)
+          d=$(idade atualizar-historico); q="há $d dia(s)"; [ "$d" = "999" ] && q="nunca"
+          HIST=0
+          if [ "$d" -gt "$LIMITE_DIAS" ] || [ -n "$DISPARADOS" ]; then
+            FALTOU="$FALTOU atualizar-historico"
+            if [ "$ENSAIO" = "1" ]; then registrar atualizar-historico "FALTOU: no modo normal eu dispararia (depois da coleta)" "$q"
+            else disparar atualizar-historico.yml && { registrar atualizar-historico "FALTOU: disparei (depois da coleta)" "$q"; HIST=1; } || registrar atualizar-historico "FALTOU: não consegui disparar" "$q"; fi
+          else registrar atualizar-historico "ok" "$q"; fi
+
+          # 3) o resumo (e o e-mail) roda sozinho quando o histórico termina; se o histórico não foi disparado e o resumo está atrasado, dispara
+          d=$(idade resumo-semanal); q="há $d dia(s)"; [ "$d" = "999" ] && q="nunca"
+          if [ "$HIST" = "1" ]; then
+            # execução disparada pelo GITHUB_TOKEN não aciona o "workflow_run": espera o histórico e dispara o resumo de propósito
+            echo "Esperando o histórico terminar..."; esperar atualizar-historico
+            disparar resumo-semanal.yml && registrar resumo-semanal "disparei (depois do histórico)" "$q" || registrar resumo-semanal "não consegui disparar" "$q"
+          elif [ "$d" -gt "$LIMITE_DIAS" ]; then
+            FALTOU="$FALTOU resumo-semanal"
+            if [ "$ENSAIO" = "1" ]; then registrar resumo-semanal "FALTOU: no modo normal eu dispararia" "$q"
+            else disparar resumo-semanal.yml && registrar resumo-semanal "FALTOU: disparei" "$q" || registrar resumo-semanal "FALTOU: não consegui disparar" "$q"; fi
+          else registrar resumo-semanal "ok" "$q"; fi
+
+          if [ -n "$FALTOU" ] && [ "$ENSAIO" = "0" ]; then
+            gh label create vigia-automatico --color D93F0B --description "O vigia semanal disparou um robô que não rodou" 2>/dev/null || true
+            gh issue create --title "Vigia $(date +%F): não rodaram e foram disparados de novo:$FALTOU" \
+              --body "O agendamento do GitHub não rodou (ou não terminou bem) para:$FALTOU. O vigia disparou cada um de novo, na ordem: coleta, histórico, resumo. Veja a aba Actions." \
+              --label vigia-automatico || echo "(não consegui abrir a issue)"
+          fi
+
+      - name: Guardar o relatório desta conferência
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/vigia-ultimo.md
+          git diff --cached --quiet && exit 0
+          git commit -m "Vigia: relatório da conferência ($(date -u +%F))"
+          git pull --rebase origin main
+          git push origin HEAD:main

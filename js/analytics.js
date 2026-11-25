@@ -182,6 +182,14 @@
     if (href.indexOf('wa.me') !== -1) { track('clique_whatsapp'); return; }
     if (link.closest('footer')) return;
 
+    /* Preparação para o mundo do trabalho: os 4 passos (cursos do SENAI/EVG e currículo/entrevista no Trampolim) */
+    if (link.classList.contains('prep-btn')) {
+      var passo = link.closest('[data-prep]');
+      var nomePasso = passo ? limpar((passo.querySelector('h5') || {}).textContent) : '';
+      track('clique_curso', ctx({ fonte: 'preparacao', item: 'Preparação · ' + (nomePasso || 'passo') }));
+      return;
+    }
+
     /* curso */
     if (link.classList.contains('btn-curso')) {
       var cartao = link.closest('.curso');
